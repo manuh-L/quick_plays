@@ -1,0 +1,60 @@
+---
+- name: Add local accounts to group and sshd_conf 
+  hosts: test
+  vars:
+#    group: "local-accounts"
+    group1: "login-local"
+  gather_facts: no
+  become: true
+
+  tasks:
+    - name: UID start
+      shell: grep "^UID_MIN" /etc/login.defs | awk '{print $2}'
+      register: l
+
+    - name: Limite
+      debug:
+        msg: "{{ l }}"
+
+#    - name: local accounts
+#      shell: awk -F':' -v "limit=$(grep "^UID_MIN" /etc/login.defs | awk '{print $2}')" '{ if ( $3 >= limit ) print $1 }' /etc/passwd
+#      register: localaccounts
+
+    - name: local com var
+      shell: awk -F':' -v limit={{ l.stdout }} '{ if ( $3 >= limit ) print $1 }' /etc/passwd
+      register: localaccounts
+
+    - name: impr2
+      debug:
+        msg: "{{ localaccounts }}"
+
+
+    - name: Ensure group {{ group1 }} exists
+      group:
+        name: "{{ group1 }}"
+        state: present
+
+    - name: add user to group
+      user:
+        name: "{{ item }}"
+        groups: "{{ group1 }}"
+        append: yes
+      with_items: "{{ localaccounts.stdout_lines }}"
+
+    - name: Add Group to AllowGroups
+      lineinfile: 
+        dest: /etc/ssh/sshd_config
+        backup: True
+        backrefs: True
+        state: present
+        regexp: '^(AllowGroups(?!.*\b{{ group1 }}\b).*)$'
+        line: '\1 {{ group1 }}'
+
+#    - name: add line to sshd
+#      lineinfile:
+#       path: /etc/ssh/sshd_config
+#       regexp: '^AllowGroups '
+#       insertafter: '^nhium001\ '
+#       line: 'test'
+#       backup: yes
+#       state: present 
